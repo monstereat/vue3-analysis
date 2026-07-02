@@ -43,6 +43,7 @@ export class ReactiveEffect {
   deps = [];
   public active = true; // 创建的effect是响应式的
 
+  // TODO 传进来的时候放到this.scheduler里面了
   // fn 用户编写的函数
   // 如果fn中依赖的数据发生变化后，需要重新调用 -> run()
   constructor(public fn, public scheduler) {}
@@ -60,6 +61,7 @@ export class ReactiveEffect {
     if (!this.active) {
       return this.fn(); // 不是激活的，执行后，什么都不用做
     }
+    // cd：处理effect嵌套情况，用于恢复外层effect
     let lastEffect = activeEffect;
     try {
       activeEffect = this;
@@ -68,6 +70,7 @@ export class ReactiveEffect {
 
       preCleanEffect(this);
       this._running++;
+      // TODO：cd 执行访问变量，进行依赖收集把effect收集起来（get）
       return this.fn(); // 依赖收集  -> state.name  state.age
     } finally {
       this._running--;
@@ -102,6 +105,7 @@ export function trackEffect(effect, dep) {
   // console.log(effect, dep);
 
   if (dep.get(effect) !== effect._trackId) {
+    // cd：收集effect，属性记住哪些effect依赖了我
     dep.set(effect, effect._trackId); // 更新id
     // {flag,name}
     // {flag,age
@@ -112,7 +116,8 @@ export function trackEffect(effect, dep) {
         // 删除掉老的
         cleanDepEffect(oldDep, effect);
       }
-      // 换成新的
+      // cd：effect收集dep，记住我依赖了哪些属性（effect.stop()需吧effect从依赖dep中移除，需知道依赖了哪些dep）
+      // 换成新的 
       effect.deps[effect._depsLength++] = dep; // 永远按照本次最新的来存放
     } else {
       effect._depsLength++;
@@ -132,6 +137,7 @@ export function triggerEffects(dep) {
     if (effect._dirtyLevel < DirtyLevels.Dirty) {
       effect._dirtyLevel = DirtyLevels.Dirty;
     }
+    // cd：effect修改依赖数据，会触发更新，running等于0才执行
     if (!effect._running) {
       if (effect.scheduler) {
         // 如果不是正在执行，才能执行

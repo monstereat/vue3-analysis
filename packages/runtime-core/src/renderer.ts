@@ -366,9 +366,12 @@ export function createRenderer(renderOptions) {
     Object.assign(instance.slots, next.children);
   };
 
-  function renderComponent(instance) {
+  function renderComponent(instance) { 
     // attrs , props  = 属性
     const { render, vnode, proxy, props, attrs, slots } = instance;
+    // cd：这里的render，是组件的render函数。有可能是vnode.type.render
+    // 或者是setup返回的render函数，是编译出来的render函数，通过_ctx.name取值
+
     if (vnode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT) {
       return render.call(proxy, proxy);
     } else {

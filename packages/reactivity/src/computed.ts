@@ -8,7 +8,7 @@ class ComputedRefImpl {
   public dep;
   constructor(getter, public setter) {
     // 我们需要创建一个effect 来关机当前计算属性的dirty属性
-
+    // TODO cd：this.effect.scheduler 就是第二个参数
     this.effect = new ReactiveEffect(
       () => getter(this._value), // 用户的fn  state.name
       () => {

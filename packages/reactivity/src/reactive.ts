@@ -10,6 +10,7 @@ function createReactiveObject(target) {
   if (!isObject(target)) {
     return target;
   }
+  // cd：已经是响应式数据返回
   if (target[ReactiveFlags.IS_REACTIVE]) {
     return target;
   }
