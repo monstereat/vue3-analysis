@@ -29,6 +29,7 @@ export function createVnode(type, props, children?, patchFlag?) {
     children,
     key: props?.key, // diff算法后面需要的key
     el: null, // 虚拟节点需要对应的真实节点是谁
+    component: null, // 如果是组件虚拟节点，挂载后对应组件的实例
     shapeFlag,
     ref: props?.ref,
     patchFlag,

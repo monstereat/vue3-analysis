@@ -1,8 +1,9 @@
-import { ShapeFlags, hasOwn } from "@vue/shared";
+import { ShapeFlags, hasOwn, isReservedProp } from "@vue/shared";
+import { createAppAPI } from "./apiCreateApp";
 import { Fragment, Text, createVnode, isSameVnode } from "./createVnode";
 import getSequence from "./seq";
 import { ReactiveEffect, isRef, reactive } from "@vue/reactivity";
-import { queueJob } from "./scheduler";
+import { queueJob, queuePostRenderEffect, flushPostFlushCbs } from "./scheduler";
 import { createComponentInstance, setupComponent } from "./component";
 import { invokeArray } from "./apiLifecycle";
 import { isKeepAlive } from "./components/KeepAlive";
@@ -51,16 +52,20 @@ export function createRenderer(renderOptions) {
     // 第一次渲染的时候我么让虚拟节点和真实的dom 创建关联 vnode.el = 真实dom
     // 第二次渲染新的vnode，可以和上一次的vnode做比对，之后更新对应的el元素，可以后续再复用这个dom元素
     let el = (vnode.el = hostCreateElement(type));
-    if (props) {
-      for (let key in props) {
-        hostPatchProp(el, key, null, props[key]);
-      }
-    }
+
+    // 与官方一致：先挂儿子再挂属性，某些属性依赖儿子已渲染（如 <select value>）
     // 9 & 8 > 0 说明儿子是文本元素
     if (shapeFlag & ShapeFlags.TEXT_CHILDREN) {
       hostSetElementText(el, children);
     } else if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
       mountChildren(children, el, anchor, parentComponent);
+    }
+    if (props) {
+      for (let key in props) {
+        // key/ref 是 vnode 的内部字段，不作为 DOM attribute（官方用 isReservedProp 跳过）
+        if (isReservedProp(key)) continue;
+        hostPatchProp(el, key, null, props[key]);
+      }
     }
 
     if (transition) {
@@ -87,10 +92,11 @@ export function createRenderer(renderOptions) {
   const patchProps = (oldProps, newProps, el) => {
     // 新的要全部生效
     for (let key in newProps) {
+      if (isReservedProp(key)) continue; // key/ref 不作为 DOM attribute 处理
       hostPatchProp(el, key, oldProps[key], newProps[key]);
     }
     for (let key in oldProps) {
-      if (!(key in newProps)) {
+      if (!(key in newProps) && !isReservedProp(key)) {
         // 以前多的现在没有了，需要删除掉
         hostPatchProp(el, key, oldProps[key], null);
       }
@@ -393,7 +399,9 @@ export function createRenderer(renderOptions) {
         instance.subTree = subTree;
 
         if (m) {
-          invokeArray(m);
+          // 与官方一致：mounted 钩子进 post 队列，整棵树渲染完之后统一执行
+          // （子组件的 m 先于父组件的 m，因为 patch 是深度优先，子的 m 先入队）
+          queuePostRenderEffect(() => invokeArray(m));
         }
       } else {
         // 基于状态的组件更新
@@ -414,7 +422,8 @@ export function createRenderer(renderOptions) {
         instance.subTree = subTree;
 
         if (u) {
-          invokeArray(u);
+          // 与官方一致：updated 钩子进 post 队列，等本次批量更新全部 patch 完再执行
+          queuePostRenderEffect(() => invokeArray(u));
         }
       }
     };
@@ -609,10 +618,13 @@ export function createRenderer(renderOptions) {
     } else {
       // 将虚拟节点变成真实节点进行渲染
       patch(container._vnode || null, vnode, container);
-      container._vnode = vnode;
     }
+    // 与官方一致：render 末尾统一 flush post 队列，mounted 钩子执行时整棵树已渲染完成
+    flushPostFlushCbs();
+    container._vnode = vnode;
   };
   return {
     render,
+    createApp: createAppAPI(render), // 与官方一致：renderer 提供 createApp，内部注入 render
   };
 }
